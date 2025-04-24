@@ -1,0 +1,376 @@
+from flask import Flask, render_template_string, request, redirect, url_for, session
+
+app = Flask(__name__)
+app.secret_key = 'tajny_kluc_pre_kosik'
+
+# Your existing data
+realistic_titles = [
+    'Pokoj pri jazere', 'Tajomstvo hôr', 'Tiché ráno', 'Oheň jesene', 'Vánok lúky',
+    'Uličky starého mesta', 'Odtiene ticha', 'Zátišie života', 'Svetlo nad horami', 'Nočný prístav',
+    'Sen v modrom', 'Búrka na obzore', 'Kvetinová melódia', 'Tep prírody', 'Dotyk večnosti'
+]
+realistic_artists = [
+    'Petra Horváthová', 'Tomáš Kováč', 'Veronika Mikulová', 'Ján Benčík', 'Lucia Kráľová',
+    'Matúš Gregor', 'Simona Urbanová', 'Dominik Hlavatý', 'Zuzana Šimeková', 'Ondrej Vaňko',
+    'Katarína Liptáková', 'Róbert Michalec', 'Eva Holubová', 'Viktor Tóth', 'Diana Macková'
+]
+more_titles = [
+    'Cesta svetla', 'Dych ticha', 'Stratené v oblakoch', 'Zrkadlenie duše', 'Tancujúce tiene',
+    'Kvapky času', 'Zimný sen', 'Vôňa dažďa', 'Letná siesta', 'Čaro okamihu',
+    'Záhrada spomienok', 'Dotyk prírody', 'Na krídlach vetra', 'Skrytý svet', 'Melódia lesa',
+    'Ticho mora', 'Hmlisté ráno', 'Krajina snov', 'Pod hviezdnou oblohou', 'Zápisky duše'
+]
+more_artists = [
+    'Adriana Krajčová', 'Igor Zeman', 'Monika Štěpánová', 'Kristián Novotný', 'Natália Demeterová',
+    'František Pavlík', 'Daniela Vavrová', 'Richard Kožuch', 'Barbora Holá', 'Marek Pospíšil',
+    'Michaela Jandová', 'Roman Tichý', 'Eliška Urbánková', 'Juraj Kučera', 'Viera Hudecová',
+    'Tibor Záhorský', 'Nikola Slaninová', 'Milan Šimko', 'Gabriela Minárová', 'Peter Šoltés'
+]
+paintings = [
+    {
+        'title': 'Západ slnka nad morom',
+        'image': 'https://images.unsplash.com/photo-1506744038136-46273834b3fb',
+        'price': 40,
+        'currency': '€',
+        'artist': 'Anna Nováková'
+    },
+    {
+        'title': 'Lesná harmónia',
+        'image': 'https://res.cloudinary.com/gimmersta-wallpaper/image/upload/c_fill,f_auto,fl_progressive,q_auto,h_500/v1638282879/articles/R10141_product.jpg',
+        'price': 95,
+        'currency': '€',
+        'artist': 'Martin Švec'
+    },
+    {
+        'title': 'Mestská noc',
+        'image': 'https://c4.wallpaperflare.com/wallpaper/203/992/49/digital-art-artwork-city-night-hd-wallpaper-preview.jpg',
+        'price': 150,
+        'currency': '€',
+        'artist': 'Lucia Bieliková'
+    },
+    *[
+        {
+            'title': realistic_titles[i],
+            'image': f'https://picsum.photos/seed/painting{i}/500/300',
+            'price': 60 + (i % 5) * 20,
+            'currency': '€',
+            'artist': realistic_artists[i]
+        } for i in range(15)
+    ]
+]
+extra_paintings = [
+    {
+        'title': more_titles[i],
+        'image': f'https://picsum.photos/seed/morepainting{i}/500/300',
+        'price': 70 + (i % 4) * 15,
+        'currency': '€',
+        'artist': more_artists[i]
+    } for i in range(20)
+]
+paintings += extra_paintings
+
+# HTML template with filters and search bar
+html_template = '''
+<!DOCTYPE html>
+<html lang="sk">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Art Store</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 2rem;
+            background-color: #f7f7f7;
+            position: relative;
+            transition: background-color 0.3s ease;
+        }
+        h1 {
+            text-align: center;
+            margin-bottom: 2rem;
+        }
+        .filters {
+            display: flex;
+            justify-content: center;
+            margin-bottom: 2rem;
+        }
+        .filters select, .filters input {
+            margin: 0 1rem;
+            padding: 0.5rem;
+            font-size: 1rem;
+        }
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+        .card {
+            background: white;
+            border-radius: 15px;
+            overflow: hidden;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
+            transition: transform 0.3s ease, box-shadow 0.3s ease;
+        }
+        .card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+        }
+        .card img {
+            width: 100%;
+            height: 200px;
+            object-fit: cover;
+            transition: transform 0.3s ease;
+        }
+        .card:hover img {
+            transform: scale(1.1);
+        }
+        .card-content {
+            padding: 1rem;
+        }
+        .card-title {
+            font-size: 1.3rem;
+            font-weight: bold;
+            margin-bottom: 0.5rem;
+            color: #333;
+        }
+        .artist {
+            font-size: 1rem;
+            color: #666;
+            margin-bottom: 0.5rem;
+        }
+        .price {
+            font-size: 1.1rem;
+            color: #444;
+            margin-bottom: 1rem;
+        }
+        .button {
+            display: block;
+            width: 100%;
+            background: linear-gradient(to right, #007BFF, #00C6FF);
+            color: white;
+            border: none;
+            padding: 0.7rem;
+            font-weight: bold;
+            text-align: center;
+            border-radius: 8px;
+            cursor: pointer;
+            text-decoration: none;
+            transition: background 0.3s ease;
+        }
+        .button:hover {
+            background: linear-gradient(to right, #0056b3, #009ACD);
+        }
+        .cart-icon {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            cursor: pointer;
+            background: #fff;
+            padding: 0.5rem 1rem;
+            border: 1px solid #ccc;
+            border-radius: 8px;
+            z-index: 100;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+            transition: background 0.2s ease;
+        }
+        .cart-icon:hover {
+            background: #eee;
+        }
+        .cart-container {
+            position: fixed;
+            top: 70px;
+            right: 20px;
+            width: 320px;
+            background: white;
+            border: 1px solid #ccc;
+            border-radius: 10px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            display: none;
+            z-index: 99;
+            transition: opacity 0.3s ease;
+        }
+        .cart-container ul {
+            list-style: none;
+            padding: 1rem;
+            margin: 0;
+        }
+        .cart-container li {
+            padding: 0.5rem 0;
+            border-bottom: 1px solid #ddd;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        .cart-container .summary {
+            padding: 1rem;
+            border-top: 1px solid #ddd;
+            font-weight: bold;
+        }
+        .remove-btn {
+            background: none;
+            border: none;
+            color: red;
+            cursor: pointer;
+            font-size: 0.9rem;
+        }
+        .payment-container {
+            padding: 2rem;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .payment-container input {
+            padding: 0.7rem;
+            margin: 1rem;
+            font-size: 1rem;
+            width: 300px;
+            max-width: 100%;
+        }
+        .payment-container button {
+            padding: 1rem 2rem;
+            background-color: #28a745;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 1.1rem;
+            margin-top: 1rem;
+        }
+        .payment-container button:hover {
+            background-color: #218838;
+        }
+    </style>
+</head>
+<body>
+    <h1>Art Store</h1>
+
+    <!-- Filter form -->
+    <div class="filters">
+        <form method="GET" action="/">
+            <select name="artist">
+                <option value="">Vyber autora</option>
+                {% for painting in paintings|unique(attribute='artist') %}
+                    <option value="{{ painting.artist }}" {% if request.args.get('artist') == painting.artist %}selected{% endif %}>{{ painting.artist }}</option>
+                {% endfor %}
+            </select>
+            <input type="number" name="price" placeholder="Max cena" value="{{ request.args.get('price', '') }}">
+            <button type="submit">Filtrovať</button>
+        </form>
+    </div>
+
+    <!-- Painting grid -->
+    <div class="grid">
+        {% for painting in paintings %}
+            {% if not request.args.get('artist') or request.args.get('artist') == painting.artist %}
+                {% if not request.args.get('price') or painting.price <= request.args.get('price')|float %}
+                    <div class="card">
+                        <img src="{{ painting.image }}" alt="{{ painting.title }}">
+                        <div class="card-content">
+                            <div class="card-title">{{ painting.title }}</div>
+                            <div class="artist">{{ painting.artist }}</div>
+                            <div class="price">{{ painting.price }} {{ painting.currency }}</div>
+                            <form action="/add-to-cart" method="POST">
+                                <input type="hidden" name="title" value="{{ painting.title }}">
+                                <input type="hidden" name="price" value="{{ painting.price }}">
+                                <button class="button" type="submit">Kúpiť</button>
+                            </form>
+                        </div>
+                    </div>
+                {% endif %}
+            {% endif %}
+        {% endfor %}
+    </div>
+
+    <!-- Cart icon and cart container -->
+    <div class="cart-icon" onclick="document.querySelector('.cart-container').style.display = 'block';">🛒 Košík</div>
+    <div class="cart-container">
+        <ul>
+            {% for item in session.get('cart', []) %}
+                <li>
+                    <div>{{ item['title'] }} - {{ item['price'] }} {{ item['currency'] }}</div>
+                    <form action="/remove-from-cart" method="POST">
+                        <input type="hidden" name="title" value="{{ item['title'] }}">
+                        <button class="remove-btn" type="submit">Odstrániť</button>
+                    </form>
+                </li>
+            {% endfor %}
+        </ul>
+        <div class="summary">
+            Celková cena: {{ total_price }} €
+        </div>
+        <a href="{{ url_for('payment') }}" class="button">Prejsť k platbe</a>
+    </div>
+
+    <!-- Payment page -->
+    {% if request.endpoint == 'payment' %}
+    <div class="payment-container">
+        <h2>Potvrdenie platby</h2>
+        <form action="/confirm-payment" method="POST">
+            <input type="text" name="name" placeholder="Meno" required>
+            <input type="text" name="card" placeholder="Číslo karty" required>
+            <input type="text" name="expiry" placeholder="Dátum expirácie" required>
+            <input type="text" name="cvv" placeholder="CVV" required>
+            <button type="submit">Potvrdiť platbu</button>
+        </form>
+    </div>
+    {% endif %}
+</body>
+</html>
+'''
+
+# Route to add painting to cart
+@app.route('/add-to-cart', methods=['POST'])
+def add_to_cart():
+    title = request.form.get('title')
+    price = request.form.get('price')
+    item = {'title': title, 'price': float(price), 'currency': '€'}
+    
+    if 'cart' not in session:
+        session['cart'] = []
+
+    session['cart'].append(item)
+    session.modified = True
+    
+    return redirect(url_for('index'))
+
+# Route to remove painting from cart
+@app.route('/remove-from-cart', methods=['POST'])
+def remove_from_cart():
+    title = request.form.get('title')
+    session['cart'] = [item for item in session.get('cart', []) if item['title'] != title]
+    session.modified = True
+    
+    return redirect(url_for('index'))
+
+# Route to display the index page
+@app.route('/')
+def index():
+    total_price = sum(item['price'] for item in session.get('cart', []))
+    
+    filtered_paintings = paintings
+
+    # Filter by artist
+    if request.args.get('artist'):
+        filtered_paintings = [p for p in filtered_paintings if p['artist'] == request.args.get('artist')]
+
+    # Filter by price
+    if request.args.get('price'):
+        max_price = float(request.args.get('price'))
+        filtered_paintings = [p for p in filtered_paintings if p['price'] <= max_price]
+
+    return render_template_string(html_template, paintings=filtered_paintings, total_price=total_price)
+
+# Route for the payment page
+@app.route('/payment')
+def payment():
+    return render_template_string(html_template)
+
+# Route to confirm payment
+@app.route('/confirm-payment', methods=['POST'])
+def confirm_payment():
+    session['cart'] = []  # Empty the cart after payment
+    return render_template_string('<h2>Platba bola úspešná! Ďakujeme za nákup!</h2>')
+
+if __name__ == '__main__':
+    app.run(debug=True)
